@@ -53,9 +53,10 @@ jobs:
           - platform: macos-latest # Apple Silicon
             target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
-          - platform: macos-13 # Intel
-            target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
+          # NOTE: macos-13 (Intel) runners are being retired by GitHub and were
+          # never allocated for this repo (perpetually queued), which blocked the
+          # publish gate. Re-add `{ platform: macos-13, target: x86_64-apple-darwin }`
+          # if/when an Intel runner (hosted or self-hosted) is available.
           - platform: ubuntu-22.04
             target: ""
             args: ""
@@ -110,7 +111,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Jarvis ${{ github.ref_name }}"
-          releaseBody: "Automated build. Installers for macOS (Apple Silicon + Intel), Windows, and Linux are attached below."
+          releaseBody: "Automated build. Installers for macOS (Apple Silicon), Windows, and Linux are attached below."
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
