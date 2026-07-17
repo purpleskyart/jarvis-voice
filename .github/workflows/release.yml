@@ -93,6 +93,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # whisper.cpp uses std::filesystem, which requires macOS >= 10.15.
+          # Harmless on Linux/Windows.
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Jarvis ${{ github.ref_name }}"
