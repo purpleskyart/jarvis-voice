@@ -11,6 +11,12 @@ on:
 permissions:
   contents: write
 
+# whisper-rs-sys runs bindgen at build time, which panics on Windows CI when it
+# can't locate libclang. Skip it and use the crate's committed bindings (valid
+# for its pinned whisper.cpp) — robust and identical on every platform.
+env:
+  WHISPER_DONT_GENERATE_BINDINGS: "1"
+
 jobs:
   # 1) Gate: unit/integration tests + frontend typecheck must pass first.
   test:

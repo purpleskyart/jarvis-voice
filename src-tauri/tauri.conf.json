@@ -31,7 +31,7 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "models/*"
+      "models/*.bin"
     ],
     "macOS": {
       "minimumSystemVersion": "10.15"
