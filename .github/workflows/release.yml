@@ -11,12 +11,6 @@ on:
 permissions:
   contents: write
 
-# whisper-rs-sys runs bindgen at build time, which panics on Windows CI when it
-# can't locate libclang. Skip it and use the crate's committed bindings (valid
-# for its pinned whisper.cpp) — robust and identical on every platform.
-env:
-  WHISPER_DONT_GENERATE_BINDINGS: "1"
-
 jobs:
   # 1) Gate: unit/integration tests + frontend typecheck must pass first.
   test:
@@ -92,11 +86,21 @@ jobs:
             libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
             libayatana-appindicator3-dev libasound2-dev \
             cmake clang libclang-dev patchelf
+      # whisper-rs-sys runs bindgen, which needs libclang to generate correct
+      # (LLP64) bindings on Windows. Its committed bindings are Unix-only, so
+      # bindgen MUST run here. LLVM is preinstalled on windows runners.
+      - name: Set up libclang (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\Program Files\LLVM\bin\libclang.dll")) {
+            choco install llvm --no-progress -y
+          }
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
       - run: pnpm install --frozen-lockfile
       - name: Fetch model weights
         run: pnpm fetch-models
       - name: Build + upload to draft release
-        if: matrix.platform != 'windows-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -110,23 +114,6 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
-
-      # TEMP diagnostic: run the Windows build directly so its error surfaces in
-      # the (publicly readable) annotations. Reverts to tauri-action once fixed.
-      - name: Build (Windows, diagnostic)
-        if: matrix.platform == 'windows-latest'
-        shell: bash
-        run: |
-          set +e
-          pnpm tauri build 2>&1 | tee build.log
-          code=${PIPESTATUS[0]}
-          if [ "$code" -ne 0 ]; then
-            echo "===== build.log tail ====="
-            tail -100 build.log
-            msg=$(tail -60 build.log | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
-            echo "::error title=Windows build failed::$msg"
-          fi
-          exit "$code"
 
   # 3) Publish: only runs if ALL platform builds succeeded → flips draft to live.
   publish:
