@@ -1,6 +1,6 @@
 [package]
 name = "jarvis"
-version = "0.1.5"
+version = "0.1.6"
 description = "Jarvis Desktop Assistant"
 authors = ["spacebar"]
 edition = "2021"
