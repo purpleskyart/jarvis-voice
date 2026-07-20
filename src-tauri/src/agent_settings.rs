@@ -55,7 +55,13 @@ impl Default for AgentSettings {
         Self {
             preset: if is_custom { AgentPreset::Custom } else { AgentPreset::OpenClaw },
             url: url.unwrap_or_else(|| DEFAULT_AGENT_URL.to_string()),
-            key: std::env::var("JARVIS_AGENT_KEY").ok().filter(|k| !k.is_empty()),
+            key: std::env::var("JARVIS_AGENT_KEY")
+                .ok()
+                .filter(|k| !k.is_empty())
+                .or_else(|| {
+                    // Auto-detect OpenClaw gateway token from config
+                    std::env::var("OPENCLAW_GATEWAY_TOKEN").ok().filter(|k| !k.is_empty())
+                }),
             model: model.unwrap_or_else(|| DEFAULT_AGENT_MODEL.to_string()),
         }
     }
