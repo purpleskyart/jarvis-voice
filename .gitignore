@@ -31,3 +31,6 @@ src-tauri/models/*.onnx
 # Local-only tooling state
 .sidebar/
 .claude/settings.local.json
+
+# Local test build from `pnpm release` (overwritten every run, never shipped)
+/release/

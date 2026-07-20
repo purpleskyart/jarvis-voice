@@ -20,6 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::capture;
 use super::stt::Transcriber;
+use crate::agent_settings::AgentSettings;
 use crate::dispatcher;
 
 /// The states from §5.1 of the architecture, serialized in `SCREAMING_SNAKE_CASE`
@@ -64,7 +65,13 @@ const DOUBLE_MIN: f32 = 0.12; // valid spacing between the two claps
 const DOUBLE_MAX: f32 = 0.7;
 const SPEECH_AMP: f32 = 0.12; // amplitude that counts as speech
 const SILENCE_END: f32 = 0.9; // trailing silence that ends a command
+const NO_SPEECH_TIMEOUT: f32 = 1.0; // give up if nothing was said at all within this long
 const LISTEN_MAX: f32 = 12.0; // hard cap on a single command
+// Below this peak amplitude a captured buffer is digital silence, not quiet
+// speech (e.g. mic permission denied — CoreAudio hands back zeroed frames
+// instead of erroring). Whisper reliably hallucinates "you"/"Thank you." on
+// true silence, so catch it before transcribing rather than after.
+const MIC_SILENCE_FLOOR: f32 = 0.004;
 
 #[derive(Clone)]
 pub struct VoiceEngine {
@@ -77,6 +84,13 @@ pub struct VoiceEngine {
     /// When true the turn records until an explicit stop (push-to-talk), rather
     /// than auto-ending on trailing silence.
     hold_mode: Arc<AtomicBool>,
+    /// Persistent toggle (not per-turn): while true, every turn — however it's
+    /// triggered (double-clap, spacebar, or the Talk button) — skips the agent
+    /// backend and simply echoes the transcript back as text + speech.
+    test_mode: Arc<AtomicBool>,
+    /// Agent gateway URL/key/model — editable from the Settings panel,
+    /// persisted to disk (see `crate::agent_settings`).
+    agent_settings: Arc<Mutex<AgentSettings>>,
 }
 
 impl VoiceEngine {
@@ -87,7 +101,17 @@ impl VoiceEngine {
             pending_start: Arc::new(AtomicBool::new(false)),
             pending_stop: Arc::new(AtomicBool::new(false)),
             hold_mode: Arc::new(AtomicBool::new(false)),
+            test_mode: Arc::new(AtomicBool::new(false)),
+            agent_settings: Arc::new(Mutex::new(AgentSettings::default())),
         }
+    }
+
+    pub fn agent_settings(&self) -> AgentSettings {
+        self.agent_settings.lock().unwrap().clone()
+    }
+
+    pub fn set_agent_settings(&self, settings: AgentSettings) {
+        *self.agent_settings.lock().unwrap() = settings;
     }
 
     pub fn state(&self) -> VoiceState {
@@ -98,6 +122,12 @@ impl VoiceEngine {
     pub fn request_listen(&self) {
         self.hold_mode.store(false, Ordering::SeqCst);
         self.pending_start.store(true, Ordering::SeqCst);
+    }
+
+    /// Arm/disarm test mode (the top-bar toggle). Applies to every subsequent
+    /// turn, regardless of how it's triggered, until toggled off again.
+    pub fn set_test_mode(&self, enabled: bool) {
+        self.test_mode.store(enabled, Ordering::SeqCst);
     }
 
     /// Begin a push-to-talk turn — records until `stop_listen` (spacebar held).
@@ -297,6 +327,13 @@ impl VoiceEngine {
                             let force_stop = engine.pending_stop.swap(false, Ordering::SeqCst);
                             let done = listen_elapsed > LISTEN_MAX
                                 || force_stop
+                                // Talk-button / double-clap turns: give up fast if
+                                // nothing was said at all...
+                                || (!hold && !spoke && listen_elapsed > NO_SPEECH_TIMEOUT)
+                                // ...or process once trailing silence follows speech.
+                                // Push-to-talk (hold) is exempt from both — it only
+                                // ever ends on release, since the user may pause
+                                // before speaking.
                                 || (!hold
                                     && spoke
                                     && silence > SILENCE_END
@@ -355,10 +392,15 @@ impl VoiceEngine {
 
     /// Transcribe → dispatch to the agent API → respond, then return to IDLE.
     fn process_command(&self, app: &AppHandle, audio: Vec<f32>, heard: bool) {
+        let is_test = self.test_mode.load(Ordering::SeqCst);
         self.set(app, VoiceState::Processing, None);
 
         if !heard {
             return self.fail(app, "Didn't catch that.");
+        }
+        let peak = audio.iter().fold(0.0f32, |m, &s| m.max(s.abs()));
+        if peak < MIC_SILENCE_FLOOR {
+            return self.fail(app, "No mic signal — check the microphone permission for Jarvis.");
         }
         let transcriber = self.transcriber.lock().unwrap().clone();
         let Some(transcriber) = transcriber else {
@@ -377,8 +419,15 @@ impl VoiceEngine {
             },
         );
 
+        if is_test {
+            // Echo test: skip the agent entirely and speak back what was heard.
+            self.set(app, VoiceState::Responding, Some(format!("You said: {transcript}")));
+            thread::sleep(Duration::from_millis(1800));
+            return self.set(app, VoiceState::Idle, None);
+        }
+
         self.set(app, VoiceState::Dispatching, Some(transcript.clone()));
-        let backend = dispatcher::default_backend();
+        let backend = dispatcher::backend_for(&self.agent_settings());
         match tauri::async_runtime::block_on(backend.dispatch(transcript)) {
             Ok(response) => {
                 self.set(app, VoiceState::Responding, Some(response));

@@ -18,11 +18,14 @@ interface VoiceStore {
   history: HistoryEntry[];
   /** Whether responses are spoken aloud (browser TTS). */
   speakEnabled: boolean;
+  /** Whether test mode is armed — turns echo back instead of hitting the agent. */
+  testMode: boolean;
 
   setState: (state: VoiceState, detail?: string) => void;
   setAudioLevel: (level: AudioLevel) => void;
   setTranscript: (text: string) => void;
   toggleSpeak: () => void;
+  toggleTestMode: () => void;
 }
 
 export const useVoiceStore = create<VoiceStore>((set) => ({
@@ -34,6 +37,7 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   lastError: "",
   history: [],
   speakEnabled: true,
+  testMode: false,
 
   setState: (state, detail) =>
     set((prev) => {
@@ -81,4 +85,6 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   setTranscript: (text) => set({ transcript: text }),
 
   toggleSpeak: () => set((prev) => ({ speakEnabled: !prev.speakEnabled })),
+
+  toggleTestMode: () => set((prev) => ({ testMode: !prev.testMode })),
 }));

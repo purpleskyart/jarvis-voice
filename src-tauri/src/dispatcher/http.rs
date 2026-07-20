@@ -1,13 +1,15 @@
-//! HTTP command backend — sends the transcript to the local agent gateway and
+//! HTTP command backend — sends the transcript to the agent gateway and
 //! returns its text response, which the front end then speaks aloud (TTS).
 //!
-//! The gateway speaks the **Kimi / Moonshot AI** protocol, which is
-//! OpenAI-compatible: `POST /v1/chat/completions` with a `messages` array,
-//! returning `choices[0].message.content`. Everything is configurable so the
-//! voice pipeline stays provider-agnostic:
+//! Speaks plain **OpenAI-compatible chat completions**: `POST
+//! /v1/chat/completions` with a `messages` array, returning
+//! `choices[0].message.content`. Defaults target a local **OpenClaw Gateway**
+//! (`model: "openclaw/default"`), but any compatible endpoint works — Kimi /
+//! Moonshot direct, or something else entirely. Configurable from the
+//! Settings panel, or via env var at startup:
 //!   - `JARVIS_AGENT_URL`   — endpoint (default `http://127.0.0.1:18789/v1/chat/completions`)
 //!   - `JARVIS_AGENT_KEY`   — optional bearer token
-//!   - `JARVIS_AGENT_MODEL` — model name (default `moonshot-v1-8k`)
+//!   - `JARVIS_AGENT_MODEL` — model / agent target (default `openclaw/default`)
 
 use async_trait::async_trait;
 use serde_json::{json, Value};

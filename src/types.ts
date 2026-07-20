@@ -26,3 +26,11 @@ export interface HistoryEntry {
   ok: boolean;
   at: number;
 }
+
+/** Agent gateway settings, editable from the Settings panel. */
+export interface AgentSettings {
+  preset: "openclaw" | "custom";
+  url: string;
+  key: string | null;
+  model: string;
+}

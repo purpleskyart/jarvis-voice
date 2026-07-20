@@ -97,6 +97,12 @@ body {
   50% { opacity: 1; }
 }
 
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .icon-btn {
   background: var(--panel);
   border: 1px solid var(--panel-brd);
@@ -113,6 +119,19 @@ body {
 .icon-btn:hover {
   color: var(--text);
   border-color: var(--accent);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.icon-btn--on {
+  color: #05070d;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(51, 217, 255, 0.45);
+}
+.icon-btn--on:hover {
+  color: #05070d;
 }
 
 /* ---------- Stage / orb ---------- */
@@ -536,7 +555,9 @@ body {
   font-size: 11px;
 }
 .field select,
-.field input[type="range"] {
+.field input[type="range"],
+.field input[type="text"],
+.field input[type="password"] {
   width: 100%;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--panel-brd);
@@ -544,6 +565,34 @@ body {
   color: var(--text);
   padding: 7px 9px;
   font-size: 13px;
+}
+.field input[type="text"]:focus,
+.field input[type="password"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.field select:disabled,
+.field input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.settings__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--panel-brd);
+}
+.settings__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.settings__saved {
+  font-size: 11px;
+  color: var(--muted);
 }
 .settings__note {
   margin: 0;

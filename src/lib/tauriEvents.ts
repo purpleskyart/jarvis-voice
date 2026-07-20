@@ -1,6 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { AudioLevel, StateChanged } from "../types";
+import type { AgentSettings, AudioLevel, StateChanged } from "../types";
 import { useVoiceStore } from "../state/voiceStore";
 
 /**
@@ -33,6 +33,11 @@ export function triggerWake(): Promise<void> {
   return invoke("trigger_wake");
 }
 
+/** Arm/disarm test mode: while on, every turn echoes the transcript back instead of dispatching to the agent. */
+export function setTestMode(enabled: boolean): Promise<void> {
+  return invoke("set_test_mode", { enabled });
+}
+
 /** Spacebar pressed — begin a push-to-talk turn (records until released). */
 export function pushToTalkStart(): Promise<void> {
   return invoke("push_to_talk_start");
@@ -41,4 +46,14 @@ export function pushToTalkStart(): Promise<void> {
 /** Spacebar released — end the push-to-talk turn and send it. */
 export function pushToTalkStop(): Promise<void> {
   return invoke("push_to_talk_stop");
+}
+
+/** Current agent gateway URL/key/model. */
+export function getAgentSettings(): Promise<AgentSettings> {
+  return invoke("get_agent_settings");
+}
+
+/** Save new agent gateway settings — applies immediately and persists to disk. */
+export function setAgentSettings(settings: AgentSettings): Promise<void> {
+  return invoke("set_agent_settings", { settings });
 }

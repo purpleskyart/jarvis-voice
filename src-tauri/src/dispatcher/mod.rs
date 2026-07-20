@@ -1,10 +1,9 @@
 //! Command dispatcher — the pluggable bridge between transcribed speech and the
-//! agent backend (referred to in the architecture as "open claw").
-//!
-//! The real backend is intentionally swappable: it may end up being a
-//! subprocess, an HTTP API, or a native SDK call. Everything the rest of the app
-//! touches goes through the [`CommandBackend`] trait, so wiring in the real
-//! integration later never has to touch the voice pipeline.
+//! agent backend. Defaults target a local **OpenClaw** Gateway (the "open
+//! claw" referenced in the architecture doc), but the backend is intentionally
+//! swappable — any OpenAI-compatible chat-completions endpoint works.
+//! Everything the rest of the app touches goes through the [`CommandBackend`]
+//! trait, so swapping the integration never has to touch the voice pipeline.
 
 use async_trait::async_trait;
 use std::fmt;
@@ -30,29 +29,23 @@ pub trait CommandBackend: Send + Sync {
     async fn dispatch(&self, text: String) -> Result<String, DispatchError>;
 }
 
-/// Local Kimi/Moonshot gateway defaults. The user's server listens on
-/// 127.0.0.1:18789 and speaks the OpenAI-compatible chat-completions schema.
-const DEFAULT_AGENT_URL: &str = "http://127.0.0.1:18789/v1/chat/completions";
-const DEFAULT_AGENT_MODEL: &str = "moonshot-v1-8k";
+/// Build the backend from the current agent settings (Settings panel, backed
+/// by `crate::agent_settings`). The `OpenClaw` preset always uses the
+/// hardcoded OpenClaw defaults for URL/model, ignoring whatever's saved in
+/// those fields; `Custom` uses them as saved. Set the URL to `echo` for an
+/// offline loopback test — the same shortcut the old `JARVIS_AGENT_URL=echo`
+/// env var gave.
+pub fn backend_for(settings: &crate::agent_settings::AgentSettings) -> Box<dyn CommandBackend> {
+    use crate::agent_settings::{AgentPreset, DEFAULT_AGENT_MODEL, DEFAULT_AGENT_URL};
 
-/// Choose the backend from the environment. Defaults to the local Kimi gateway;
-/// set `JARVIS_AGENT_URL=echo` for an offline loopback test.
-pub fn default_backend() -> Box<dyn CommandBackend> {
-    let url = std::env::var("JARVIS_AGENT_URL")
-        .ok()
-        .filter(|u| !u.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_AGENT_URL.to_string());
-
-    if url == "echo" {
+    let (url, model) = match settings.preset {
+        AgentPreset::OpenClaw => (DEFAULT_AGENT_URL.to_string(), DEFAULT_AGENT_MODEL.to_string()),
+        AgentPreset::Custom => (settings.url.clone(), settings.model.clone()),
+    };
+    if url.trim() == "echo" {
         return Box::new(EchoBackend);
     }
-
-    let key = std::env::var("JARVIS_AGENT_KEY").ok().filter(|k| !k.is_empty());
-    let model = std::env::var("JARVIS_AGENT_MODEL")
-        .ok()
-        .filter(|m| !m.is_empty())
-        .unwrap_or_else(|| DEFAULT_AGENT_MODEL.to_string());
-    Box::new(http::HttpBackend::new(url, key, model))
+    Box::new(http::HttpBackend::new(url, settings.key.clone(), model))
 }
 
 /// Fallback stub backend: echoes the transcript back so the full state machine

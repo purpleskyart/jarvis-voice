@@ -5,6 +5,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import {
   bindVoiceEvents,
   triggerWake,
+  setTestMode,
   pushToTalkStart,
   pushToTalkStop,
 } from "./lib/tauriEvents";
@@ -27,8 +28,16 @@ function App() {
   const state = useVoiceStore((s) => s.state);
   const response = useVoiceStore((s) => s.response);
   const historyLen = useVoiceStore((s) => s.history.length);
+  const testMode = useVoiceStore((s) => s.testMode);
+  const toggleTestMode = useVoiceStore((s) => s.toggleTestMode);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+
+  const handleToggleTestMode = () => {
+    const next = !testMode;
+    toggleTestMode();
+    setTestMode(next);
+  };
 
   useEffect(() => {
     const unbind = bindVoiceEvents();
@@ -99,13 +108,28 @@ function App() {
           <span className={"status__pip status__pip--" + state.toLowerCase()} />
           {LABELS[state]}
         </div>
-        <button
-          className="icon-btn"
-          onClick={() => setSettingsOpen((v) => !v)}
-          aria-label="Settings"
-        >
-          ⚙
-        </button>
+        <div className="topbar__actions">
+          <button
+            className={"icon-btn" + (testMode ? " icon-btn--on" : "")}
+            onClick={handleToggleTestMode}
+            aria-label="Test mode"
+            aria-pressed={testMode}
+            title={
+              testMode
+                ? "Test mode is on — turns echo back instead of reaching the agent"
+                : "Test mode is off — turns dispatch to the agent as normal"
+            }
+          >
+            🔁
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => setSettingsOpen((v) => !v)}
+            aria-label="Settings"
+          >
+            ⚙
+          </button>
+        </div>
       </header>
 
       <div className="stage">
