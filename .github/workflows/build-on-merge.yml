@@ -51,7 +51,9 @@ jobs:
           git add package.json src-tauri/Cargo.toml
           git commit -m "chore(release): bump version to ${{ steps.bump.outputs.new_version }}"
           git tag ${{ steps.bump.outputs.tag_name }}
-          git push origin main --tags
+          # Push to the fork (where we have write access), not upstream
+          git remote add fork https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git push fork main --tags
 
   # 1) Gate: tests must pass first
   test:
