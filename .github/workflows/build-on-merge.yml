@@ -53,7 +53,7 @@ jobs:
           git tag ${{ steps.bump.outputs.tag_name }}
           # Push to the fork (where we have write access), not upstream
           git remote add fork https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git push fork main --tags
+          git push fork HEAD:main --tags
 
   # 1) Gate: tests must pass first
   test:
