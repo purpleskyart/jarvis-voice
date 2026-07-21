@@ -428,13 +428,27 @@ impl VoiceEngine {
 
         self.set(app, VoiceState::Dispatching, Some(transcript.clone()));
         let backend = dispatcher::backend_for(&self.agent_settings());
-        match tauri::async_runtime::block_on(backend.dispatch(transcript)) {
-            Ok(response) => {
+        
+        // Use a channel to bridge async dispatch from the sync thread
+        let (tx, rx) = std::sync::mpsc::channel();
+        let transcript_for_async = transcript.clone();
+        tauri::async_runtime::spawn(async move {
+            let result = backend.dispatch(transcript_for_async).await;
+            let _ = tx.send(result);
+        });
+        
+        // Block on the channel (not the async runtime)
+        match rx.recv() {
+            Ok(Ok(response)) => {
                 self.set(app, VoiceState::Responding, Some(response));
                 thread::sleep(Duration::from_millis(1800));
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 self.set(app, VoiceState::Error, Some(e.to_string()));
+                thread::sleep(Duration::from_millis(1600));
+            }
+            Err(_) => {
+                self.set(app, VoiceState::Error, Some("Agent dispatch channel closed".to_string()));
                 thread::sleep(Duration::from_millis(1600));
             }
         }
