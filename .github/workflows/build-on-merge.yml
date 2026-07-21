@@ -1,21 +1,66 @@
 name: Build on Merge
 
-# Trigger when a PR is merged into main (or when a version tag is pushed)
+# Trigger when a PR is merged into main
 on:
   push:
     branches: [main]
-    tags:
-      - "v*"
 
 permissions:
   contents: write
 
 jobs:
+  # 0) Bump version and create tag
+  version:
+    runs-on: ubuntu-22.04
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+      tag_name: ${{ steps.bump.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+      - name: Bump patch version
+        id: bump
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          # Split version into parts
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          # Increment patch
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          TAG_NAME="v$NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "Bumping version: $CURRENT → $NEW_VERSION"
+      - name: Update package.json version
+        run: |
+          npm version ${{ steps.bump.outputs.new_version }} --no-git-tag-version
+      - name: Update Cargo.toml version
+        run: |
+          sed -i 's/^version = "[^"]*"/version = "${{ steps.bump.outputs.new_version }}"/' src-tauri/Cargo.toml
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/Cargo.toml
+          git commit -m "chore(release): bump version to ${{ steps.bump.outputs.new_version }}"
+          git tag ${{ steps.bump.outputs.tag_name }}
+          git push origin main --tags
+
   # 1) Gate: tests must pass first
   test:
+    needs: version
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag_name }}
       - uses: pnpm/action-setup@v6
         with:
           version: 11
@@ -44,7 +89,7 @@ jobs:
 
   # 2) Build native installers on each OS
   build:
-    needs: test
+    needs: [version, test]
     strategy:
       fail-fast: false
       matrix:
@@ -61,6 +106,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag_name }}
       - uses: pnpm/action-setup@v6
         with:
           version: 11
@@ -106,12 +153,14 @@ jobs:
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.AppImage
 
-  # 3) Create/update release with all artifacts
+  # 3) Create release with all artifacts
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag_name }}
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -120,9 +169,11 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Jarvis ${{ github.ref_name }}"
+          tag_name: ${{ needs.version.outputs.tag_name }}
+          name: "Jarvis ${{ needs.version.outputs.new_version }}"
           body: |
+            ## Jarvis ${{ needs.version.outputs.new_version }}
+            
             Automated build triggered by merge to main.
             
             ## Installers
@@ -131,7 +182,7 @@ jobs:
             - **Linux**: `.deb` or `.AppImage`
             
             ## What's Changed
-            See [commit history](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }})
+            See [commit history](https://github.com/${{ github.repository }}/commits/${{ needs.version.outputs.tag_name }})
           draft: false
           prerelease: false
           files: |
